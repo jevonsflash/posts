@@ -4,6 +4,9 @@ volo.abp：http://192.168.1.190:30010/linzhongxiaosheng/general-curd-sample
 
 vue：http://192.168.1.190:30010/linzhongxiaosheng/general-curd-sample-frontend
 
+在线演示：
+
+https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
 
 目录
 - [项目搭建](#项目搭建)
