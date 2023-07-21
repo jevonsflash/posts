@@ -2068,19 +2068,19 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto,   IKeywordOrient
 
 在告警管理页面建立一些告警
 
-![Alt text](image-33.png)
+![Alt text](./assets/image-33.png)
 
 在筛选中输入关键字“3”，点击查询
 
-![Alt text](image-34.png)
+![Alt text](./assets/image-34.png)
 
 可以看到将筛选出标题包含关键字“3”的告警
 
-![Alt text](image-35.png)
+![Alt text](./assets/image-35.png)
 
 查询的报文Payload如下图：
 
-![Alt text](image-36.png)
+![Alt text](./assets/image-36.png)
 
 
 
@@ -2203,15 +2203,15 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IUserOrientedFil
 
 创建一些组织架构，命名“群组”
 
-![Alt text](image-28.png)
+![Alt text](./assets/image-28.png)
 
 在不同“群组”下创建一些客户（Client）
 
-![Alt text](image-27.png)
+![Alt text](./assets/image-27.png)
 
 
 
-![Alt text](image-29.png)
+![Alt text](./assets/image-29.png)
 
 
 在告警管理页面中，创建一些告警，并将这些告警分配给不同的客户
@@ -2219,13 +2219,13 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IUserOrientedFil
 
 
 
-![Alt text](image-37.png)
+![Alt text](./assets/image-37.png)
 
 告警创建完成后，进入客户管理，在右侧客户列表中点击“查看详情”
 
 打开客户详情页面，点击“告警”标签页，可以看到该客户下的告警列表
 
-![Alt text](image-38.png)
+![Alt text](./assets/image-38.png)
 
 
 # 按用户关系查询
@@ -2241,7 +2241,7 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IUserOrientedFil
 
 用户之间的关系通过Relation表来存储。模型如下图所示：
 
-![Alt text](image-39.png)
+![Alt text](./assets/image-39.png)
 
 * 关系类型由Type来定义
 
@@ -2540,29 +2540,29 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IRelationToOrien
 
 创建一些客户（Client）
 
-![Alt text](image-27.png)
+![Alt text](./assets/image-27.png)
 
 进入客户管理，在右侧客户列表中点击“查看详情”
 
 打开客户详情页面，点击管理 - 设置签约员工
 
-![Alt text](image-41.png)
+![Alt text](./assets/image-41.png)
 
 选择一个用户，此时该客户会签约至该用户账号下，这里我们将客户1和客户3签约至当前账号admin下。
 
-![Alt text](image-40.png)
+![Alt text](./assets/image-40.png)
 
 登录签约用户(admin)的账号，点击“我的” - 客户 - 签约客户
 
 在客户列表中可见，客户1和客户3已签约至当前账号下。
 
-![Alt text](image-42.png)
+![Alt text](./assets/image-42.png)
 
 
 
 组合查询的报文Payload如下图：
 
-![Alt text](image-43.png)
+![Alt text](./assets/image-43.png)
 
 
 
