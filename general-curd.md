@@ -9,6 +9,7 @@ vue：http://192.168.1.190:30010/linzhongxiaosheng/general-curd-sample-frontend
 https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
 
 目录
+
 - [项目搭建](#项目搭建)
   - [创建项目](#创建项目)
   - [创建业务模块](#创建业务模块)
@@ -46,18 +47,26 @@ https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
   - [使用](#使用-1)
   - [测试](#测试-1)
 - [按任意字段关键字查询](#按任意字段关键字查询)
-  - [提取方法](#提取方法)
-
-Todo:
-
-- 按任意字段排序
-
-- 按用户查询
-
-- 按用户关系查询
-
-- 按创建日期查询（起始日期，结束日期）
-
+  - [实现](#实现-1)
+  - [应用](#应用)
+  - [测试](#测试-2)
+- [按用户查询](#按用户查询)
+  - [实现](#实现-2)
+  - [使用](#使用-2)
+  - [测试](#测试-3)
+- [按用户关系查询](#按用户关系查询)
+  - [原理](#原理-1)
+  - [实现](#实现-3)
+    - [正向用户关系](#正向用户关系)
+    - [反向用户关系](#反向用户关系)
+  - [使用](#使用-3)
+  - [测试](#测试-4)
+- [按日期范围查询](#按日期范围查询)
+  - [实现](#实现-4)
+    - [按开始日期查询](#按开始日期查询)
+    - [按结束日期查询](#按结束日期查询)
+  - [使用](#使用-4)
+  - [项目地址](#项目地址)
 
 
 # 项目搭建
@@ -1913,6 +1922,9 @@ public class AlarmAppService : ExtendedCurdAppServiceBase<Matoapp.Health.Alarm.A
 
 # 按任意字段关键字查询
 
+
+## 实现
+
 定义按任意字段关键字查询过滤器（IKeywordOrientedFilter）接口，查询实体列表Dto若实现该接口，将筛选指定的目标字段（TargetFields）包含指定的关键字（Keyword）的实体。
 
 ```
@@ -1995,7 +2007,6 @@ private Expression<Func<TEntity, bool>> FilterByKeywordDynamic<T>(string keyword
 
 ```
 
-## 提取方法
 
 创建默认的应用过滤规则DefaultConvention，将之前的按组织架构查询和按关键字查询的代码提取到DefaultConvention方法中，此类可派生，使用virtual关键字以便在子类中重写，代码如下：
 
@@ -2034,3 +2045,670 @@ protected override async Task<IQueryable<TEntity>> CreateFilteredQueryAsync(TGet
 
 ```
 
+## 应用
+
+无需在应用层中更改代码，
+
+在GetAllAlarmInput中实现IKeywordOrientedFilter接口，代码如下：
+
+```
+public class GetAllAlarmInput : PagedAndSortedResultRequestDto,   IKeywordOrientedFilter
+{
+    //keyword
+    public string Keyword { get; set; }
+    public string TargetFields { get; set; }
+
+    ...
+}
+
+```
+
+## 测试
+
+
+在告警管理页面建立一些告警
+
+![Alt text](image-33.png)
+
+在筛选中输入关键字“3”，点击查询
+
+![Alt text](image-34.png)
+
+可以看到将筛选出标题包含关键字“3”的告警
+
+![Alt text](image-35.png)
+
+查询的报文Payload如下图：
+
+![Alt text](image-36.png)
+
+
+
+# 按用户查询
+
+
+
+## 实现
+
+
+定义按用户查询（IUserOrientedFilter）接口
+
+```
+public interface IUserOrientedFilter
+{
+    public string EntityUserIdIdiom { get; }
+    Guid? UserId { get; set; }
+}
+
+```
+
+* EntityUserIdIdiom：语义上的UserId，用于指定业务实体中用于描述“用户Id”字段的名称，若不指定，则默认为“UserId”
+* UserId：用户Id，若为Guid.Empty，则使用当前登录用户的Id
+
+
+
+
+查询实体列表Dto若实现该接口，将筛选指定 UserId 下的关联的实体。
+
+若指定 UserId 为 Guid.Empty，则使用当前登录用户的 UserId。
+
+ICurrentUser是Abp的一个服务，用于获取当前登录用户的信息
+
+
+创建应用过滤条件方法：ApplyUserOrientedFiltered，在此实现拼接LINQ表达式，代码如下：
+
+
+```
+protected virtual IQueryable<TEntity> ApplyUserOrientedFiltered(IQueryable<TEntity> query, TGetListInput input)
+{
+    if (input is IUserOrientedFilter)
+    {
+        var filteredInput = input as IUserOrientedFilter;
+        var entityUserIdIdiom = filteredInput.EntityUserIdIdiom;
+        if (string.IsNullOrEmpty(entityUserIdIdiom))
+        {
+            entityUserIdIdiom = "UserId";
+        }
+        if (HasProperty<TEntity>(entityUserIdIdiom))
+        {
+            var property = typeof(TEntity).GetProperty(entityUserIdIdiom);
+            if (filteredInput != null && filteredInput.UserId.HasValue)
+            {
+                Guid userId = default;
+                if (filteredInput.UserId.Value == Guid.Empty)
+                {
+                    using (var scope = ServiceProvider.CreateScope())
+                    {
+                        var currentUser = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
+                        if (currentUser != null)
+                        {
+                            userId = currentUser.GetId();
+                        }
+                    }
+                }
+                else
+                {
+                    userId = filteredInput.UserId.Value;
+                }
+
+                var parameter = Expression.Parameter(typeof(TEntity), "p");
+                var keyConstantExpression = Expression.Constant(userId, typeof(Guid));
+
+                var propertyAccess = Expression.MakeMemberAccess(parameter, property);
+                var expression = Expression.Equal(propertyAccess, keyConstantExpression);
+
+                var equalExpression = expression != null ?
+                        Expression.Lambda<Func<TEntity, bool>>(expression, parameter)
+                        : p => false;
+
+                query = query.Where(equalExpression);
+            }
+        }
+    }
+    return query;
+}
+
+
+```
+
+请注意，可应用过滤的条件为：
+
+1. input需实现IUserOrientedFilter接口；
+2. 实体必须关联用户。
+
+否则将原封不动返回IQueryable对象。
+
+
+## 使用
+
+无需在应用层中更改代码，
+
+在GetAllAlarmInput中实现IUserOrientedFilter接口，代码如下：
+
+```
+public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IUserOrientedFilter
+{
+    Guid? UserId { get; set; }
+    
+    public string EntityUserIdIdiom { get; }      
+    // 或显式实现   
+    // public string EntityUserIdIdiom => "UserId";
+    
+    ...
+}
+
+```
+
+## 测试
+
+创建一些组织架构，命名“群组”
+
+![Alt text](image-28.png)
+
+在不同“群组”下创建一些客户（Client）
+
+![Alt text](image-27.png)
+
+
+
+![Alt text](image-29.png)
+
+
+在告警管理页面中，创建一些告警，并将这些告警分配给不同的客户
+
+
+
+
+![Alt text](image-37.png)
+
+告警创建完成后，进入客户管理，在右侧客户列表中点击“查看详情”
+
+打开客户详情页面，点击“告警”标签页，可以看到该客户下的告警列表
+
+![Alt text](image-38.png)
+
+
+# 按用户关系查询
+
+
+用户关系（Relation）是描述业务系统中人员与人员之间的关系，如：签约、关注，或者朋友关系。
+
+之前我们在扩展身份管理模块的时候，已经实现了用户关系管理，可以查看本系列博文之前的内容。[怎样优雅地增删查改（二）：扩展身份管理模块](https://blog.csdn.net/jevonsflash/article/details/131602982)
+
+## 原理
+
+**查询依据**
+
+用户之间的关系通过Relation表来存储。模型如下图所示：
+
+![Alt text](image-39.png)
+
+* 关系类型由Type来定义
+
+* 关系指向由UserId与RelatedUserId来描述
+
+    人员之间的关系是单项的，也就是说可以A是B的好友，但B不一定是A的好友
+
+    正向关系：User -> RelatedUser
+
+    反向关系：RelatedUser -> User
+
+查询目标业务对象HealthAlarm关联了业务用户HealthClient，因业务用户与鉴权用户IdentityUser共享同一个Id，因此可以通过查询用户关系关联的User，查询到业务对象。
+
+
+![Alt text](screenshot20230718.png)
+
+
+## 实现
+
+
+### 正向用户关系
+
+
+
+定义按正向用户关系查询（IRelationToOrientedFilter）接口
+
+```
+public interface IRelationToOrientedFilter
+{
+    Guid? RelationToUserId { get; set; }
+    
+    public string EntityUserIdIdiom { get; }
+
+    string RelationType { get; set; }
+
+}
+
+```
+
+* EntityUserIdIdiom：语义上的UserId，用于指定业务实体中用于描述“用户Id”字段的名称，若不指定，则默认为“UserId”；
+* RelationToUserId：正向关系用户Id，若为Guid.Empty，则使用当前登录用户的Id；
+* RelationType：关系类型，如：“attach”为签约，“follow”为关注，可自定义。
+
+
+
+对于Relation服务，其依赖关系在应用层，查找指定用户的关系用户将在CurdAppServiceBase的子类实现。创建一个抽象方法GetUserIdsByRelatedToAsync
+
+```
+protected abstruct Task<IEnumerable<Guid>> GetUserIdsByRelatedToAsync(Guid userId, string relationType);
+```
+
+
+创建应用过滤条件方法：ApplyRelationToOrientedFiltered，在此实现拼接LINQ表达式，
+
+ICurrentUser是Abp的一个服务，用于获取当前登录用户的信息
+
+代码如下：
+
+
+```
+protected virtual async Task<IQueryable<TEntity>> ApplyRelationToOrientedFiltered(IQueryable<TEntity> query, TGetListInput input)
+{
+    if (input is IRelationToOrientedFilter)
+    {
+        var filteredInput = input as IRelationToOrientedFilter;
+        var entityUserIdIdiom = filteredInput.EntityUserIdIdiom;
+        if (string.IsNullOrEmpty(entityUserIdIdiom))
+        {
+            entityUserIdIdiom = "UserId";
+        }
+        if (HasProperty<TEntity>(entityUserIdIdiom))
+        {
+            var property = typeof(TEntity).GetProperty(entityUserIdIdiom);
+            if (filteredInput != null && filteredInput.RelationToUserId.HasValue && !string.IsNullOrEmpty(filteredInput.RelationType))
+            {
+
+                Guid userId = default;
+                if (filteredInput.RelationToUserId.Value == Guid.Empty)
+                {
+                    using (var scope = ServiceProvider.CreateScope())
+                    {
+                        var currentUser = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
+                        if (currentUser != null)
+                        {
+                            userId = currentUser.GetId();
+                        }
+                    }
+                }
+                else
+                {
+                    userId = filteredInput.RelationToUserId.Value;
+                }
+
+                var ids = await GetUserIdsByRelatedToAsync(userId, filteredInput.RelationType);
+                Expression originalExpression = null;
+                var parameter = Expression.Parameter(typeof(TEntity), "p");
+                foreach (var id in ids)
+                {
+                    var keyConstantExpression = Expression.Constant(id, typeof(Guid));
+                    var propertyAccess = Expression.MakeMemberAccess(parameter, property);
+                    var expressionSegment = Expression.Equal(propertyAccess, keyConstantExpression);
+
+                    if (originalExpression == null)
+                    {
+                        originalExpression = expressionSegment;
+                    }
+                    else
+                    {
+                        originalExpression = Expression.Or(originalExpression, expressionSegment);
+                    }
+                }
+
+                var equalExpression = originalExpression != null ?
+                        Expression.Lambda<Func<TEntity, bool>>(originalExpression, parameter)
+                        : p => false;
+
+                query = query.Where(equalExpression);
+
+            }
+
+        }
+    }
+    return query;
+}
+
+
+```
+
+### 反向用户关系
+
+定义按反向用户关系查询（IRelationFromOrientedFilter）接口
+
+```
+public interface IRelationFromOrientedFilter
+{
+    Guid? RelationFromUserId { get; set; }
+    
+    public string EntityUserIdIdiom { get; }
+
+    string RelationType { get; set; }
+
+}
+
+```
+
+* EntityUserIdIdiom：语义上的UserId，用于指定业务实体中用于描述“用户Id”字段的名称，若不指定，则默认为“UserId”；
+* RelationFromUserId：反向关系用户Id，若为Guid.Empty，则使用当前登录用户的Id；
+* RelationType：关系类型，如：“attach”为签约，“follow”为关注，可自定义。
+
+
+对于Relation服务，其依赖关系在应用层，查找指定用户的关系用户将在CurdAppServiceBase的子类实现。创建一个抽象方法GetUserIdsByRelatedFromAsync
+
+```
+protected abstruct Task<IEnumerable<Guid>> GetUserIdsByRelatedFromAsync(Guid userId, string relationType);
+```
+
+
+创建应用过滤条件方法：ApplyRelationFromOrientedFiltered，在此实现拼接LINQ表达式，
+
+ICurrentUser是Abp的一个服务，用于获取当前登录用户的信息
+
+代码如下：
+
+
+```
+protected virtual async Task<IQueryable<TEntity>> ApplyRelationFromOrientedFiltered(IQueryable<TEntity> query, TGetListInput input)
+{
+    if (input is IRelationFromOrientedFilter)
+    {
+        var filteredInput = input as IRelationFromOrientedFilter;
+        var entityUserIdIdiom = filteredInput.EntityUserIdIdiom;
+        if (string.IsNullOrEmpty(entityUserIdIdiom))
+        {
+            entityUserIdIdiom = "UserId";
+        }
+        if (HasProperty<TEntity>(entityUserIdIdiom))
+        {
+            var property = typeof(TEntity).GetProperty(entityUserIdIdiom);
+            if (filteredInput != null && filteredInput.RelationFromUserId.HasValue && !string.IsNullOrEmpty(filteredInput.RelationType))
+            {
+
+                Guid userId = default;
+                if (filteredInput.RelationFromUserId.Value == Guid.Empty)
+                {
+                    using (var scope = ServiceProvider.CreateScope())
+                    {
+                        var currentUser = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
+                        if (currentUser != null)
+                        {
+                            userId = currentUser.GetId();
+                        }
+                    }
+                }
+                else
+                {
+                    userId = filteredInput.RelationFromUserId.Value;
+                }
+
+                var ids = await GetUserIdsByRelatedFromAsync(userId, filteredInput.RelationType);
+                Expression originalExpression = null;
+                var parameter = Expression.Parameter(typeof(TEntity), "p");
+                foreach (var id in ids)
+                {
+                    var keyConstantExpression = Expression.Constant(id, typeof(Guid));
+                    var propertyAccess = Expression.MakeMemberAccess(parameter, property);
+                    var expressionSegment = Expression.Equal(propertyAccess, keyConstantExpression);
+
+                    if (originalExpression == null)
+                    {
+                        originalExpression = expressionSegment;
+                    }
+                    else
+                    {
+                        originalExpression = Expression.Or(originalExpression, expressionSegment);
+                    }
+                }
+
+                var equalExpression = originalExpression != null ?
+                        Expression.Lambda<Func<TEntity, bool>>(originalExpression, parameter)
+                        : p => false;
+
+                query = query.Where(equalExpression);
+
+            }
+        }
+    }
+    return query;
+}
+
+```
+
+IRelationToOrientedFilter 和 IRelationFromOrientedFilter接口实现上并非互斥。
+
+请注意，可应用过滤的条件为：
+
+1. input需实现IRelationToOrientedFilter接口；
+2. 实体必须关联用户。
+
+否则将原封不动返回IQueryable对象。
+
+
+
+
+
+## 使用
+
+在应用层中，实现GetUserIdsByRelatedToAsync
+
+```
+protected override async Task<IEnumerable<Guid>> GetUserIdsByRelatedToAsync(Guid userId, string relationType)
+{
+    var ids = await relationAppService.GetRelatedToUserIdsAsync(new GetRelatedUsersInput()
+    {
+        UserId = userId,
+        Type = relationType
+    });
+    return ids;
+
+}
+```
+
+或GetUserIdsByRelatedFromAsync
+
+```
+protected override async Task<IEnumerable<Guid>> GetUserIdsByRelatedFromAsync(Guid userId, string relationType)
+{
+    var ids = await relationAppService.GetRelatedFromUserIdsAsync(new GetRelatedUsersInput()
+    {
+        UserId = userId,
+        Type = relationType
+    });
+    return ids;
+
+}
+```
+
+
+
+在GetAllAlarmInput中实现IRelationToOrientedFilter或GetUserIdsByRelatedFromAsync接口，代码如下：
+
+```
+public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IRelationToOrientedFilter
+{ 
+    public Guid? RelationToUserId { get ; set ; }
+    public string RelationType { get; set; }
+    public string EntityUserIdIdiom { get; }
+
+    ...
+}
+
+```
+
+
+
+## 测试
+
+创建一些客户（Client）
+
+![Alt text](image-27.png)
+
+进入客户管理，在右侧客户列表中点击“查看详情”
+
+打开客户详情页面，点击管理 - 设置签约员工
+
+![Alt text](image-41.png)
+
+选择一个用户，此时该客户会签约至该用户账号下，这里我们将客户1和客户3签约至当前账号admin下。
+
+![Alt text](image-40.png)
+
+登录签约用户(admin)的账号，点击“我的” - 客户 - 签约客户
+
+在客户列表中可见，客户1和客户3已签约至当前账号下。
+
+![Alt text](image-42.png)
+
+
+
+组合查询的报文Payload如下图：
+
+![Alt text](image-43.png)
+
+
+
+# 按日期范围查询
+
+使用数据库的创建时间作为查询依据，在Abp框架中，实体类实现ICreationAuditedObject接口，或继承CreationAuditedEntity类，使用仓储创建记录时将自动生成CreationTime。
+
+## 实现
+
+
+定义按创建日期范围查询（IDateSpanOrientedFilter）接口。
+
+遵守接口隔离原则，将IDateSpanOrientedFilter接口拆分为IStartDateOrientedFilter和IEndDateOrientedFilter接口。
+
+```
+public interface IDateSpanOrientedFilter : IStartDateOrientedFilter, IEndDateOrientedFilter
+{
+
+}
+```
+
+按开始日期查询接口定义如下：
+
+```
+public interface IStartDateOrientedFilter
+{
+    DateTime? StartDate { get; set; }
+}
+```
+
+结束日期接口定义如下：
+```
+public interface IEndDateOrientedFilter
+{
+    DateTime? EndDate { get; set; }
+}
+```
+
+
+
+* StartDate：开始日期，记录的CreationTime **大于等于** 该日期的记录将被筛选
+* EndDate：用户Id，记录的CreationTime **小于** 该日期的记录将被筛选
+
+
+### 按开始日期查询
+
+创建应用过滤条件方法：ApplyStartDateOrientedFiltered，在此实现拼接LINQ表达式，代码如下：
+
+
+```
+protected virtual IQueryable<TEntity> ApplyStartDateOrientedFiltered(IQueryable<TEntity> query, TGetListInput input)
+{
+    if (input is IStartDateOrientedFilter && HasProperty<TEntity>("CreationTime"))
+    {
+        var property = typeof(TEntity).GetProperty("CreationTime");
+        var filteredInput = input as IStartDateOrientedFilter;
+        if (filteredInput != null && filteredInput.StartDate.HasValue)
+        {
+            Expression originalExpression = null;
+            var parameter = Expression.Parameter(typeof(TEntity), "p");
+
+            var dateConstantExpression = Expression.Constant(filteredInput.StartDate.Value, typeof(DateTime));
+
+            var propertyAccess = Expression.MakeMemberAccess(parameter, property);
+            var expression = Expression.GreaterThanOrEqual(propertyAccess, dateConstantExpression);
+
+            var equalExpression = expression != null ?
+                    Expression.Lambda<Func<TEntity, bool>>(expression, parameter)
+                    : p => false;
+
+
+            query = query.Where(equalExpression);
+
+        }
+
+    }
+    return query;
+}
+
+
+```
+
+### 按结束日期查询
+
+创建应用过滤条件方法：ApplyEndDateOrientedFiltered，在此实现拼接LINQ表达式，代码如下：
+
+```
+protected virtual IQueryable<TEntity> ApplyEndDateOrientedFiltered(IQueryable<TEntity> query, TGetListInput input)
+{
+    if (input is IEndDateOrientedFilter && HasProperty<TEntity>("CreationTime"))
+    {
+        var property = typeof(TEntity).GetProperty("CreationTime");
+        var filteredInput = input as IEndDateOrientedFilter;
+        if (filteredInput != null && filteredInput.EndDate.HasValue)
+        {
+            Expression originalExpression = null;
+            var parameter = Expression.Parameter(typeof(TEntity), "p");
+
+            var dateConstantExpression = Expression.Constant(filteredInput.EndDate.Value, typeof(DateTime));
+
+            var propertyAccess = Expression.MakeMemberAccess(parameter, property);
+            var expression = Expression.LessThan(propertyAccess, dateConstantExpression);
+
+            var equalExpression = expression != null ?
+                    Expression.Lambda<Func<TEntity, bool>>(expression, parameter)
+                    : p => false;
+
+
+            query = query.Where(equalExpression);
+
+        }
+
+    }
+    return query;
+}
+```
+
+
+请注意，可应用过滤的条件为：
+
+1. input需实现IDateSpanOrientedFilter或子接口；
+2. 实体必须包含“CreationTime”字段。
+
+否则将原封不动返回IQueryable对象。
+
+
+## 使用
+
+无需在应用层中更改代码，
+
+在GetAllAlarmInput中实现IDateSpanOrientedFilter接口，代码如下：
+
+```
+public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IDateSpanOrientedFilter
+{
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+
+    ...
+}
+
+```
+
+
+至此，所有的通用查询接口已实现完成。在这个项目中，我实现了适合我的联合查询方式，你可以根据实际业务需求，扩展和调整查询实现。
+
+## 项目地址
+
+[Github:general-curd-sample](https://github.com/jevonsflash/general-curd-sample)
