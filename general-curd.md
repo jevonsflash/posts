@@ -1,15 +1,10 @@
-项目地址
-
-volo.abp：http://192.168.1.190:30010/linzhongxiaosheng/general-curd-sample
-
-vue：http://192.168.1.190:30010/linzhongxiaosheng/general-curd-sample-frontend
-
-在线演示：
-
-https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
 
 目录
 
+- [项目介绍](#项目介绍)
+  - [模块化](#模块化)
+  - [由框架实现的](#由框架实现的)
+  - [需要实现的](#需要实现的)
 - [项目搭建](#项目搭建)
   - [创建项目](#创建项目)
   - [创建业务模块](#创建业务模块)
@@ -67,6 +62,46 @@ https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
     - [按结束日期查询](#按结束日期查询)
   - [使用](#使用-4)
   - [项目地址](#项目地址)
+  - [在线演示：](#在线演示)
+
+
+# 项目介绍
+
+本项目是基于一个简单的用户健康数据管理系统，我们将对业务常用的查询功能进行扩展，抽象这些业务并封装成接口，称之为通用查询接口（GeneralCurdInterfaces），本项目关注的是基础设施层，但大部分实现还是围绕业务，对于普适性有待研究，所以我还是决定以Sample为名。
+
+## 模块化
+
+Abp模块是可以供主模块重用的独立功能单元，每个模块可以包含应用服务、领域层、数据访问层、Web API等，模块可以被其他模块引用，也可以被主模块引用。
+
+本项目模块化的目的除了可重用，更多是为微服务架构做准备。微服务架构不在本博文的讨论范围，为了简化，还是使用单体应用架构。
+
+## 由框架实现的
+
+Volo.Abp 为我们实现了`CrudAppService`，（在旧版本的AbpBoilerplate中称Crud为Curd，在我看来两者没有什么区别，本项目还是以Curd命名）
+
+`CrudAppService`为我们提供了基本的增删改查，以及分页、排序的实现
+
+![在这里插入图片描述](https://img-blog.csdnimg.cn/8665e43911e9403893c62344144fd103.png)
+
+
+## 需要实现的
+
+
+* 按任意字段关键字查询
+
+* 按任意字段排序
+
+* 按组织架构查询
+
+* 按用户查询
+
+* 按用户关系查询
+
+* 按创建日期查询（起始日期，结束日期）
+
+本项目虽然是用Volo.Abp实现，但对于旧版本的AbpBoilerplate仍然可以方便的移植，可以看我之前的博文：[[Volo.Abp升级笔记]使用旧版Api规则替换RESTful Api以兼容老程序](https://blog.csdn.net/jevonsflash/article/details/129756995)，如何以最大限度保持接口的兼容性。
+
+
 
 
 # 项目搭建
@@ -2712,3 +2747,7 @@ public class GetAllAlarmInput : PagedAndSortedResultRequestDto, IDateSpanOriente
 ## 项目地址
 
 [Github:general-curd-sample](https://github.com/jevonsflash/general-curd-sample)
+
+## 在线演示：
+
+https://www.matoapp.net:3012/  用户名admin 密码1q2w3E*
